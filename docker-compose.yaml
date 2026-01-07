@@ -20,8 +20,12 @@ services:
     restart: "no"
 
   trigger:
-    image: 'ghcr.io/triggerdotdev/trigger.dev:v4.2.0'
+    image: 'ghcr.io/triggerdotdev/trigger.dev:main'
     restart: unless-stopped
+    labels:
+      # Hacky solution for dashboard to work - add DOCKER_RUNNER_NETWORKS netowrk name as hardcoded
+      # Thanks to https://github.com/coollabsio/coolify/discussions/2439#discussioncomment-10950035  
+      - "traefik.docker.network=qg0so04w8o8ko4g0sggcs0k8"
     depends_on:
       - postgres
       - redis
@@ -67,6 +71,45 @@ services:
       RUN_REPLICATION_LOG_LEVEL: info
       APP_LOG_LEVEL: info
       TRIGGER_TELEMETRY_DISABLED: 0
+      # Email configuration (optional - magic links logged if not set)
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
+      FROM_EMAIL: ${FROM_EMAIL:-}
+      REPLY_TO_EMAIL: ${REPLY_TO_EMAIL:-}
+      # Resend
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # SMTP alternative
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # GitHub OAuth (optional)
+      AUTH_GITHUB_CLIENT_ID: ${AUTH_GITHUB_CLIENT_ID:-}
+      AUTH_GITHUB_CLIENT_SECRET: ${AUTH_GITHUB_CLIENT_SECRET:-}
+      # Email whitelist (applies to all auth methods)
+      WHITELISTED_EMAILS: ${WHITELISTED_EMAILS:-}
+      # AWS SES alternative
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # Admin access (regex pattern to auto-promote users to admin)
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      # Concurrency limits (capacity planning)
+      DEFAULT_ENV_EXECUTION_CONCURRENCY_LIMIT: ${DEFAULT_ENV_EXECUTION_CONCURRENCY_LIMIT:-100}
+      DEFAULT_ORG_EXECUTION_CONCURRENCY_LIMIT: ${DEFAULT_ORG_EXECUTION_CONCURRENCY_LIMIT:-300}
+      # Development settings
+      DEV_MAX_CONCURRENT_RUNS: ${DEV_MAX_CONCURRENT_RUNS:-25}
+      # Worker settings
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-1000}
+      # Payload & metadata limits
+      TASK_PAYLOAD_OFFLOAD_THRESHOLD: ${TASK_PAYLOAD_OFFLOAD_THRESHOLD:-524288}
+      TASK_PAYLOAD_MAXIMUM_SIZE: ${TASK_PAYLOAD_MAXIMUM_SIZE:-3145728}
+      BATCH_TASK_PAYLOAD_MAXIMUM_SIZE: ${BATCH_TASK_PAYLOAD_MAXIMUM_SIZE:-1000000}
+      TASK_RUN_METADATA_MAXIMUM_SIZE: ${TASK_RUN_METADATA_MAXIMUM_SIZE:-262144}
+      # Realtime settings
+      REALTIME_STREAM_MAX_LENGTH: ${REALTIME_STREAM_MAX_LENGTH:-1000}
+      REALTIME_STREAM_TTL: ${REALTIME_STREAM_TTL:-86400}
     volumes:
       - 'shared-data:/home/node/shared'
     healthcheck:
@@ -190,7 +233,7 @@ services:
       TRIGGER_WORKLOAD_API_DOMAIN: supervisor
       TRIGGER_WORKLOAD_API_PORT_EXTERNAL: 8020
       DOCKER_HOST: tcp://docker-proxy:2375
-      DOCKER_RUNNER_NETWORKS: ${DOCKER_RUNNER_NETWORKS:-trigger-net}
+      DOCKER_RUNNER_NETWORKS: "qg0so04w8o8ko4g0sggcs0k8"
       DOCKER_AUTOREMOVE_EXITED_CONTAINERS: 1
       DOCKER_REGISTRY_URL: ${SERVICE_URL_REGISTRY}
       DOCKER_REGISTRY_USERNAME: ${REGISTRY_USERNAME:-trigger}
