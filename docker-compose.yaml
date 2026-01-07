@@ -1,8 +1,26 @@
 services:
+  # Init service to create htpasswd file
+  registry-init:
+    image: httpd:alpine
+    volumes:
+      - "registry-auth:/auth"
+    environment:
+      REGISTRY_USERNAME: ${REGISTRY_USERNAME:-trigger}
+      REGISTRY_PASSWORD: "${REGISTRY_PASSWORD:-very-secure-indeed}"
+    command: >
+      sh -c "
+        if [ ! -f /auth/htpasswd ]; then
+          echo 'Creating htpasswd file...';
+          htpasswd -Bbc /auth/htpasswd $$REGISTRY_USERNAME $$REGISTRY_PASSWORD;
+          echo 'htpasswd file created successfully';
+        else
+          echo 'htpasswd file already exists';
+        fi
+      "
+    restart: "no"
+
   trigger:
-    networks:
-      - trigger-net
-    image: 'ghcr.io/triggerdotdev/trigger.dev:main'
+    image: 'ghcr.io/triggerdotdev/trigger.dev:v4.2.0'
     restart: unless-stopped
     depends_on:
       - postgres
@@ -62,8 +80,6 @@ services:
       retries: 5
       start_period: 30s
   postgres:
-    networks:
-      - trigger-net
     image: postgres:14
     restart: unless-stopped
     command:
@@ -82,8 +98,6 @@ services:
       retries: 10
       start_period: 10s
   redis:
-    networks:
-      - trigger-net
     image: 'redis:7'
     restart: unless-stopped
     volumes:
@@ -95,8 +109,6 @@ services:
       retries: 5
       start_period: 10s
   electric:
-    networks:
-      - trigger-net
     image: 'electricsql/electric:1.2.4'
     restart: unless-stopped
     depends_on:
@@ -112,8 +124,6 @@ services:
       retries: 5
       start_period: 10s
   clickhouse:
-    networks:
-      - trigger-net
     image: 'bitnamilegacy/clickhouse:latest'
     restart: unless-stopped
     environment:
@@ -129,12 +139,14 @@ services:
       retries: 5
       start_period: 10s
   registry:
-    networks:
-      - trigger-net
     image: 'registry:2'
     restart: unless-stopped
+    depends_on:
+      registry-init:
+        condition: service_completed_successfully
     volumes:
-      - './registry/auth.htpasswd:/auth/htpasswd:ro'
+      - "registry-auth:/auth:ro"
+      - "registry-data:/var/lib/registry"
     environment:
       REGISTRY_AUTH: htpasswd
       REGISTRY_AUTH_HTPASSWD_REALM: 'Registry Realm'
@@ -146,8 +158,6 @@ services:
       retries: 5
       start_period: 10s
   minio:
-    networks:
-      - trigger-net
     image: bitnamilegacy/minio:latest
     restart: unless-stopped
     environment:
@@ -165,8 +175,6 @@ services:
       start_period: 10s
 
   supervisor:
-    networks:
-      - trigger-net
     image: 'ghcr.io/triggerdotdev/supervisor:v4-beta'
     restart: unless-stopped
     depends_on:
@@ -177,7 +185,7 @@ services:
     environment:
       TRIGGER_API_URL: http://trigger:3000
       OTEL_EXPORTER_OTLP_ENDPOINT: http://trigger:3000/otel
-      TRIGGER_WORKER_TOKEN: 'file:///home/node/shared/worker_token'
+      TRIGGER_WORKER_TOKEN: "file:///home/node/shared/worker_token"
       MANAGED_WORKER_SECRET: ${SERVICE_PASSWORD_MANAGEDWORKER}
       TRIGGER_WORKLOAD_API_DOMAIN: supervisor
       TRIGGER_WORKLOAD_API_PORT_EXTERNAL: 8020
@@ -186,12 +194,13 @@ services:
       DOCKER_AUTOREMOVE_EXITED_CONTAINERS: 1
       DOCKER_REGISTRY_URL: ${SERVICE_URL_REGISTRY}
       DOCKER_REGISTRY_USERNAME: ${REGISTRY_USERNAME:-trigger}
-      DOCKER_REGISTRY_PASSWORD: '${REGISTRY_PASSWORD:-very-secure-indeed}'
+      DOCKER_REGISTRY_PASSWORD: "${REGISTRY_PASSWORD:-very-secure-indeed}"
       DEBUG: 1
       ENFORCE_MACHINE_PRESETS: 1
       TRIGGER_DEQUEUE_INTERVAL_MS: 1000
     volumes:
-      - 'shared-data:/home/node/shared'
+      - "shared-data:/home/node/shared"
+      - "/var/run/docker.sock:/var/run/docker.sock"
     healthcheck:
       test: ["CMD", "node", "-e", "http.get('http://localhost:8020/health', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
@@ -199,8 +208,6 @@ services:
       retries: 5
       start_period: 10s
   docker-proxy:
-    networks:
-      - trigger-net
     image: 'tecnativa/docker-socket-proxy:latest'
     restart: unless-stopped
     volumes:
@@ -225,5 +232,4 @@ volumes:
   minio-data:
   shared-data:
   registry-data:
-networks:
-  trigger-net:
+  registry-auth:
