@@ -97,7 +97,7 @@ services:
   electric:
     networks:
       - trigger-net
-    image: 'electricsql/electric:1.0.24'
+    image: 'electricsql/electric:1.2.4'
     restart: unless-stopped
     depends_on:
       - postgres
